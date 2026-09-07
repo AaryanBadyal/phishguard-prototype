@@ -1,14 +1,14 @@
 # PhishGuard AI
 
 > **Real-time phishing detection engine and mock Gmail extension prototype built for rapid email security analysis.**
-> *Winner of the TedX Presentation Award at the April 2026 Cohort Hackathon.*
+> *Winner of the TEDx Presentation Award at the April 2026 Cohort Hackathon.*
 
 ---
 ![PhishGuard AI Demo](phishing-prototype-photo.png)
 
 ## Overview
 
-**PhishGuard AI** is a lightweight, real-time threat detection system designed to inspect suspicious links inside email clients before users fall victim to credential harvesting or phishing scams. 
+**PhishGuard AI** is a lightweight, real-time threat detection system that inspects suspicious links inside email clients before users fall victim to credential harvesting or phishing scams. 
 
 The prototype simulates an active Chrome Extension integrated into a mock Gmail interface. It performs dual-layer threat verification: an instant client-side heuristic inspection combined with an asynchronous AI classification engine.
 
@@ -25,7 +25,7 @@ The prototype simulates an active Chrome Extension integrated into a mock Gmail 
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## Architecture & Tech Stack
 
 * **Front-End / UI:** Native HTML5, CSS3 (Google Sans styling, CSS Keyframes), Vanilla JavaScript (ES6+).
 * **AI Integration:** Anthropic Claude API (`claude-3-5-sonnet` / `claude-sonnet-4`).
@@ -33,7 +33,7 @@ The prototype simulates an active Chrome Extension integrated into a mock Gmail 
 
 ---
 
-## 🚀 Quick Start & Usage
+## Quick Start & Usage
 
 Because the prototype is self-contained within a single executable HTML file, no complex server build step is required!
 
