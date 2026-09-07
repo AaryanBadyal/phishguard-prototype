@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Gmail</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Google Sans', Roboto, arial, sans-serif; background: #f6f8fc; color: #202124; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+#analyze-overlay { display: none; position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+#analyze-overlay.show { display: flex; }
+#analyze-card { background: #fff; border: 1px solid #dadce0; border-radius: 12px; padding: 36px 44px; text-align: center; font-family: 'Google Sans', arial, sans-serif; min-width: 340px; box-shadow: 0 8px 40px rgba(0,0,0,0.18); }
+.analyze-spinner { width: 48px; height: 48px; border: 3px solid #e8eaed; border-top-color: #1a73e8; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#analyze-title { font-size: 15px; color: #1a73e8; font-weight: 600; margin-bottom: 6px; }
+#analyze-url { font-size: 12px; color: #9aa0a6; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 auto; }
+.astep { font-size: 13px; color: #e0e0e0; padding: 4px 0; transition: color 0.3s; display: flex; align-items: center; gap: 8px; }
+.astep::before { content: '○'; font-size: 10px; flex-shrink: 0; }
+.astep.active { color: #1a73e8; font-weight: 500; }
+.astep.active::before { content: '●'; color: #1a73e8; }
+.astep.done { color: #9aa0a6; }
+.astep.done::before { content: '✓'; color: #34a853; }
+
+#result-overlay { display: none; position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+#result-overlay.show { display: flex; }
+#result-card { background: #fff; border-radius: 12px; min-width: 380px; max-width: 440px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.18); font-family: 'Google Sans', arial, sans-serif; animation: popIn 0.3s cubic-bezier(0.34,1.4,0.64,1); }
+@keyframes popIn { from { transform: scale(0.88); opacity:0; } to { transform: scale(1); opacity:1; } }
+#result-top { padding: 28px 28px 20px; border-bottom: 1px solid #e0e0e0; }
+#result-icon { font-size: 40px; margin-bottom: 12px; }
+#result-verdict { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+#result-reason { font-size: 13px; color: #5f6368; line-height: 1.6; }
+#result-meta { padding: 16px 28px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; }
+#result-detail .rd-label { font-size: 10px; color: #9aa0a6; letter-spacing: 1px; margin-bottom: 4px; text-transform: uppercase; }
+#result-detail .rd-value { font-size: 13px; color: #202124; font-weight: 500; margin-bottom: 10px; }
+#result-flags { padding: 8px 0; max-height: 150px; overflow-y: auto; }
+.rflag { border-left: 3px solid; padding: 5px 10px; margin: 3px 20px; font-size: 12px; color: #5f6368; background: #f8f9fa; line-height: 1.5; border-radius: 0 4px 4px 0; }
+#result-actions { padding: 16px 28px; display: flex; gap: 10px; border-top: 1px solid #e0e0e0; }
+.r-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 600; transition: all 0.15s; font-family: inherit; }
+#btn-proceed { background: #fff; color: #5f6368; border: 1px solid #dadce0; }
+#btn-proceed:hover { background: #f8f9fa; }
+#btn-dismiss { background: #1a73e8; color: #fff; border: none; }
+#btn-dismiss:hover { background: #1557b0; }
+#btn-proceed-safe { background: #1a73e8; color: #fff; border: none; }
+#btn-proceed-safe:hover { background: #1557b0; }
+
+.gmail-header { background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; padding: 8px 16px; gap: 12px; height: 64px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.gmail-logo { display: flex; align-items: center; gap: 4px; margin-right: 8px; text-decoration: none; }
+.gmail-logo-text { font-size: 22px; color: #5f6368; font-weight: 300; letter-spacing: -0.5px; }
+.gmail-search { flex: 1; background: #eaf1fb; border: none; border-radius: 24px; display: flex; align-items: center; padding: 0 16px; height: 44px; gap: 10px; max-width: 720px; }
+.gmail-search input { flex: 1; background: transparent; border: none; outline: none; font-size: 16px; color: #202124; }
+.gmail-search input::placeholder { color: #5f6368; }
+.gmail-header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.hdr-btn { background: none; border: none; cursor: pointer; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #5f6368; transition: background 0.12s; }
+.hdr-btn:hover { background: rgba(0,0,0,0.06); }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: #1a73e8; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+.ext-wrap { position: relative; }
+#ext-btn { background: none; border: none; cursor: pointer; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.12s; }
+#ext-btn:hover { background: rgba(0,0,0,0.06); }
+#ext-btn svg { width: 22px; height: 22px; }
+#ext-menu { display: none; position: absolute; top: 46px; right: 0; background: #fff; border-radius: 8px; width: 300px; box-shadow: 0 2px 10px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.1); z-index: 50000; overflow: hidden; animation: menuIn 0.15s ease; }
+#ext-menu.open { display: block; }
+@keyframes menuIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+.em-title { padding: 14px 16px 8px; font-size: 13px; font-weight: 600; color: #202124; border-bottom: 1px solid #f1f3f4; }
+.em-row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; background: #f0f7ff; }
+.em-ico { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #e8f0fe; }
+.em-name { font-size: 13px; color: #1a73e8; font-weight: 500; }
+.em-badge { font-size: 10px; background: #1a73e8; color: #fff; border-radius: 8px; padding: 1px 6px; margin-left: 5px; }
+.em-desc { font-size: 11px; color: #70757a; }
+
+.gmail-body { display: flex; flex: 1; overflow: hidden; }
+.sidebar { width: 256px; flex-shrink: 0; padding: 8px 0; overflow-y: auto; background: #fff; }
+.compose-btn { margin: 4px 16px 16px; background: #c2e7ff; border: none; border-radius: 16px; padding: 16px 24px; font-size: 14px; font-weight: 600; color: #001d35; cursor: pointer; display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); transition: background 0.15s; }
+.compose-btn:hover { background: #a8d8f8; }
+.sidebar-item { display: flex; align-items: center; gap: 14px; padding: 4px 16px 4px 26px; height: 36px; cursor: pointer; border-radius: 0 18px 18px 0; font-size: 14px; color: #202124; margin-right: 16px; transition: background 0.12s; }
+.sidebar-item:hover { background: #e8eaed; }
+.sidebar-item.active { background: #d3e3fd; font-weight: 600; }
+.sidebar-count { margin-left: auto; font-size: 12px; color: #444746; }
+
+.email-list { flex: 1; overflow-y: auto; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; background: #fff; }
+.el-tab { padding: 14px 24px; font-size: 14px; color: #5f6368; cursor: pointer; border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 8px; }
+.el-tab.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: 500; }
+.email-row { display: flex; align-items: center; padding: 0 16px; height: 52px; cursor: pointer; border-bottom: 1px solid #f0f0f0; transition: background 0.1s; gap: 12px; }
+.email-row:hover { background: #f5f5f5; }
+.email-row.unread { font-weight: 600; background: #fff; }
+.email-row.read { background: #f2f6fc; }
+.email-row.open { background: #e8f0fe; }
+.er-star { font-size: 18px; color: #e0e0e0; flex-shrink: 0; }
+.er-star.starred { color: #f4b400; }
+.er-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.er-sender { width: 160px; flex-shrink: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.er-body { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.er-subject { color: #202124; }
+.er-preview { color: #5f6368; font-weight: 400; }
+.er-time { font-size: 12px; color: #5f6368; flex-shrink: 0; margin-left: 8px; font-weight: 400; }
+.er-tag { font-size: 11px; padding: 1px 7px; border-radius: 3px; margin-right: 6px; flex-shrink: 0; }
+
+.email-detail { width: 520px; flex-shrink: 0; background: #fff; border-left: 1px solid #e0e0e0; overflow-y: auto; display: flex; flex-direction: column; }
+.ed-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9aa0a6; gap: 8px; }
+.ed-placeholder span { font-size: 48px; }
+.ed-header { padding: 20px 24px 16px; border-bottom: 1px solid #e0e0e0; }
+.ed-subject { font-size: 22px; font-weight: 400; color: #202124; margin-bottom: 12px; line-height: 1.3; }
+.ed-from { display: flex; align-items: center; gap: 10px; }
+.ed-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.ed-from-info { flex: 1; }
+.ed-from-name { font-size: 14px; font-weight: 600; color: #202124; }
+.ed-from-email { font-size: 12px; color: #5f6368; }
+.ed-time { font-size: 12px; color: #5f6368; }
+.ed-body { padding: 24px; font-size: 14px; color: #202124; line-height: 1.7; flex: 1; }
+.ed-body p { margin-bottom: 14px; }
+.ed-footer { padding: 16px 24px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; }
+.ed-action { background: none; border: 1px solid #dadce0; border-radius: 20px; padding: 8px 20px; font-size: 14px; cursor: pointer; color: #202124; transition: background 0.12s; }
+.ed-action:hover { background: #f6f8fc; }
+.phish-link { display: inline-block; background: #1a73e8; color: #fff; padding: 10px 24px; border-radius: 4px; font-size: 14px; font-weight: 500; margin: 8px 0; cursor: pointer; border: none; font-family: inherit; transition: background 0.15s; }
+.phish-link:hover { background: #1557b0; }
+.phish-link.green { background: #188038; }
+.phish-link.green:hover { background: #137333; }
+.phish-warning-tag { display: inline-flex; align-items: center; gap: 6px; background: #fce8e6; border: 1px solid #f28b82; border-radius: 4px; padding: 6px 12px; font-size: 12px; color: #c5221f; margin-bottom: 14px; }
+
+.risk-pill { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.2px; }
+.risk-pill span { font-weight: 700; }
+.risk-pill.safe { background: #e6f4ea; color: #137333; border: 1px solid #81c995; }
+.risk-pill.danger { background: #fce8e6; color: #c5221f; border: 1px solid #f28b82; }
+</style>
+</head>
+<body>
+
+<div id="analyze-overlay">
+  <div id="analyze-card">
+    <div class="analyze-spinner"></div>
+    <div id="analyze-title">PhishGuard AI — Analyzing Link</div>
+    <div id="analyze-url"></div>
+    <div style="margin-top:18px;text-align:left;">
+      <div class="astep" id="step1">Extracting domain</div>
+      <div class="astep" id="step2">Running heuristic checks</div>
+      <div class="astep" id="step3">Checking for typosquatting</div>
+      <div class="astep" id="step4">Calling AI classifier</div>
+      <div class="astep" id="step5">Generating verdict</div>
+    </div>
+  </div>
+</div>
+
+<div id="result-overlay">
+  <div id="result-card">
+    <div id="result-top">
+      <div id="result-icon"></div>
+      <div id="result-verdict"></div>
+      <div id="result-reason"></div>
+    </div>
+    <div id="result-meta">
+      <div id="result-score-wrap">
+        <svg width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="26" fill="none" stroke="#e8eaed" stroke-width="5"/>
+          <circle id="result-arc" cx="32" cy="32" r="26" fill="none" stroke="#188038" stroke-width="5"
+            stroke-dasharray="0 163" stroke-linecap="round" transform="rotate(-90 32 32)"
+            style="transition:stroke-dasharray 1s ease;"/>
+          <text id="result-score-num" x="32" y="37" text-anchor="middle" font-size="15" font-family="arial" font-weight="700" fill="#188038">--</text>
+        </svg>
+        <div style="text-align:center;font-size:9px;color:#9aa0a6;letter-spacing:1px;margin-top:2px;">RISK</div>
+      </div>
+      <div id="result-detail">
+        <div class="rd-label">Threat Type</div>
+        <div class="rd-value" id="result-type">—</div>
+        <div class="rd-label">AI Confidence</div>
+        <div class="rd-value" id="result-conf">—</div>
+      </div>
+    </div>
+    <div id="result-flags"></div>
+    <div id="result-actions">
+      <button class="r-btn" id="btn-proceed" style="display:none;">⚠ Open Anyway</button>
+      <button class="r-btn" id="btn-proceed-safe" style="display:none;">✓ Open Link</button>
+      <button class="r-btn" id="btn-dismiss">✕ Stay Safe</button>
+    </div>
+  </div>
+</div>
+
+<div class="gmail-header">
+  <div class="gmail-logo">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg" width="32" height="32" alt="Gmail"/>
+    <span class="gmail-logo-text">Gmail</span>
+  </div>
+  <div class="gmail-search">
+    <span>🔍</span>
+    <input type="text" placeholder="Search mail"/>
+  </div>
+  <div class="gmail-header-right">
+    <div class="ext-wrap">
+      <button id="ext-btn" title="Extensions">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z" fill="#5f6368"/>
+        </svg>
+      </button>
+      <div id="ext-menu">
+        <div class="em-title">Extensions</div>
+        <div class="em-row">
+          <div class="em-ico">🛡️</div>
+          <div>
+            <div class="em-name">PhishGuard AI <span class="em-badge">ACTIVE</span></div>
+            <div class="em-desc">Scanning all email links in real-time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="hdr-btn">⚙</button>
+    <button class="hdr-btn">⊞</button>
+    <div class="avatar">J</div>
+  </div>
+</div>
+
+<div class="gmail-body">
+  <div class="sidebar">
+    <button class="compose-btn"><span style="font-size:22px;">✏</span> Compose</button>
+    <div class="sidebar-item active"><span>📥</span> Inbox <span class="sidebar-count" style="font-weight:700;color:#202124;">4</span></div>
+    <div class="sidebar-item"><span>⭐</span> Starred</div>
+    <div class="sidebar-item"><span>🕐</span> Snoozed</div>
+    <div class="sidebar-item"><span>📤</span> Sent</div>
+    <div class="sidebar-item"><span>📝</span> Drafts <span class="sidebar-count">3</span></div>
+    <div style="padding:16px 16px 8px;font-size:12px;font-weight:600;color:#444746;letter-spacing:0.5px;margin-top:8px;">LABELS</div>
+    <div class="sidebar-item"><span style="color:#d93025;">●</span>&nbsp; Work</div>
+    <div class="sidebar-item"><span style="color:#1a73e8;">●</span>&nbsp; Personal</div>
+    <div class="sidebar-item"><span style="color:#188038;">●</span>&nbsp; Receipts</div>
+  </div>
+
+  <div class="email-list" id="email-list">
+    <div style="display:flex;border-bottom:1px solid #e0e0e0;">
+      <div class="el-tab active">Primary</div>
+      <div class="el-tab">Promotions <span style="background:#1a73e8;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;margin-left:4px;">2</span></div>
+      <div class="el-tab">Social</div>
+    </div>
+
+    <div class="email-row unread" data-idx="0" id="erow-0">
+      <span class="er-star starred">★</span>
+      <div class="er-avatar" style="background:#e8453c;">A</div>
+      <div class="er-sender">Apple</div>
+      <div class="er-body">
+        <span class="er-subject">Your Apple ID was used to sign in</span>
+        <span class="er-preview"> — We noticed a new sign-in to your Apple ID. If this was you...</span>
+      </div>
+      <div class="risk-pill safe">✓ Safe <span>4%</span></div>
+      <div class="er-time">10:24 AM</div>
+    </div>
+
+    <div class="email-row unread" data-idx="1" id="erow-1">
+      <span class="er-star">☆</span>
+      <div class="er-avatar" style="background:#b91c1c;">A</div>
+      <div class="er-sender">Apple-Support</div>
+      <div class="er-body">
+        <span class="er-subject">URGENT: Your Apple ID will be suspended</span>
+        <span class="er-preview"> — Verify immediately or your account access will be terminated...</span>
+      </div>
+      <div class="risk-pill danger">⚠ Risk <span>91%</span></div>
+      <div class="er-time">9:51 AM</div>
+    </div>
+
+    <div class="email-row read" data-idx="2" id="erow-2">
+      <span class="er-star">☆</span>
+      <div class="er-avatar" style="background:#1a73e8;">P</div>
+      <div class="er-sender">PayPal</div>
+      <div class="er-body">
+        <span class="er-subject">Your payment to Netflix was successful</span>
+        <span class="er-preview"> — Hi John, your payment of $15.99 to Netflix has been processed...</span>
+      </div>
+      <div class="risk-pill safe">✓ Safe <span>2%</span></div>
+      <div class="er-time">Yesterday</div>
+    </div>
+
+    <div class="email-row read" data-idx="3" id="erow-3">
+      <span class="er-star">☆</span>
+      <div class="er-avatar" style="background:#7c4dff;">P</div>
+      <div class="er-sender">PayPaI-Secure</div>
+      <div class="er-body">
+        <span class="er-subject">Action Required: Confirm your account now</span>
+        <span class="er-preview"> — Your PayPal account has been limited. Verify your information...</span>
+      </div>
+      <div class="risk-pill danger">⚠ Risk <span>87%</span></div>
+      <div class="er-time">Yesterday</div>
+    </div>
+
+    <div class="email-row read" data-idx="4" id="erow-4">
+      <span class="er-star">☆</span>
+      <div class="er-avatar" style="background:#34a853;">G</div>
+      <div class="er-sender">Google</div>
+      <div class="er-body">
+        <span class="er-subject">Security alert: New sign-in on Windows</span>
+        <span class="er-preview"> — Your Google Account was just signed in to on a new Windows device...</span>
+      </div>
+      <div class="risk-pill safe">✓ Safe <span>6%</span></div>
+      <div class="er-time">Mon</div>
+    </div>
+  </div>
+
+  <div class="email-detail" id="email-detail">
+    <div class="ed-placeholder">
+      <span>📬</span>
+      <p>Select an email to read</p>
+      <p style="font-size:12px;color:#bbb;margin-top:4px;">PhishGuard AI will scan any link you click</p>
+    </div>
+  </div>
+</div>
+
+<script>
+var EMAILS = [
+  {
+    sender: "Apple", email: "no-reply@apple.com", avatarBg: "#e8453c", avatarLetter: "A",
+    subject: "Your Apple ID was used to sign in to iCloud",
+    time: "Today, 10:24 AM",
+    links: [
+      { label: "Review Account Activity", url: "https://appleid.apple.com/account/manage", cls: "green" }
+    ],
+    bodyParts: [
+      "<p>Dear John,</p>",
+      "<p>Your <strong>Apple ID</strong> (john@gmail.com) was used to sign in to iCloud via a web browser.</p>",
+      "<p><strong>Date &amp; Time:</strong> March 7, 2026, 10:21 AM EST<br><strong>Location:</strong> Toronto, ON, Canada<br><strong>Browser:</strong> Chrome on macOS</p>",
+      "<p>If this was you, you can safely ignore this message. If you did not sign in, your account may be compromised.</p>",
+      "<p>Review your account activity:</p>",
+      "LINK_0",
+      "<p style='margin-top:16px;'>Apple will never ask for your password via email.</p>",
+      "<p>Regards,<br>The Apple Team</p>"
+    ]
+  },
+  {
+    sender: "Apple-Support", email: "support@apple-id-verify.tk", avatarBg: "#b91c1c", avatarLetter: "A",
+    subject: "URGENT: Your Apple ID will be suspended in 24 hours",
+    time: "Today, 9:51 AM",
+    warning: true,
+    links: [
+      { label: "Verify My Account Now →", url: "https://apple-id-verify.tk/secure-login?urgent=true&account=suspended", cls: "", style: "background:#c5221f;" }
+    ],
+    bodyParts: [
+      "<div class='phish-warning-tag'>⚠️ PhishGuard AI flagged this sender — treat with caution</div>",
+      "<p>Dear Valued Customer,</p>",
+      "<p>We have detected <strong>unusual activity</strong> on your Apple ID account. Your account will be <strong>locked within 24 hours</strong> unless you verify your information immediately.</p>",
+      "<p>Failure to verify your account will result in permanent suspension and loss of all data.</p>",
+      "<p><strong>URGENT ACTION REQUIRED:</strong></p>",
+      "LINK_0",
+      "<p style='margin-top:16px;font-size:12px;color:#999;'>This is an automated message from Apple Inc. Customer Security Team. © 2026 Apple Inc.</p>"
+    ]
+  },
+  {
+    sender: "PayPal", email: "service@paypal.com", avatarBg: "#1a73e8", avatarLetter: "P",
+    subject: "Your payment to Netflix was successful",
+    time: "Yesterday, 4:12 PM",
+    links: [
+      { label: "View Transaction", url: "https://www.paypal.com/activity/payment/PP-88214792", cls: "green" },
+      { label: "Help Center", url: "https://paypal.com/help", cls: "", style: "background:none;color:#1a73e8;padding:0;text-decoration:underline;font-size:14px;" }
+    ],
+    bodyParts: [
+      "<p>Hi John,</p>",
+      "<p>Your payment was sent successfully.</p>",
+      "<div style='background:#f8f9fa;border:1px solid #e0e0e0;border-radius:4px;padding:16px;margin:14px 0;'><div style='display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;'><span style='color:#5f6368;'>Amount</span><span><strong>$15.99 CAD</strong></span></div><div style='display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;'><span style='color:#5f6368;'>Sent to</span><span>Netflix</span></div><div style='display:flex;justify-content:space-between;font-size:14px;'><span style='color:#5f6368;'>Transaction ID</span><span style='color:#1a73e8;'>PP-88214792</span></div></div>",
+      "<p>View the full details:</p>",
+      "LINK_0",
+      "<p style='margin-top:16px;'>Questions? Visit our LINK_1</p>",
+      "<p>Thanks,<br>PayPal</p>"
+    ]
+  },
+  {
+    sender: "PayPaI-Secure", email: "security@paypa1-secure-verify.xyz", avatarBg: "#7c4dff", avatarLetter: "P",
+    subject: "Action Required: Your PayPal account has been limited",
+    time: "Yesterday, 2:08 PM",
+    warning: true,
+    links: [
+      { label: "Restore My Account", url: "https://paypa1-secure-verify.xyz/account/restore?action=required", cls: "", style: "background:#7c4dff;" }
+    ],
+    bodyParts: [
+      "<div class='phish-warning-tag'>⚠️ PhishGuard AI flagged this sender — treat with caution</div>",
+      "<p>Dear PayPal User,</p>",
+      "<p>We have noticed <strong>suspicious activity</strong> on your account. To protect your funds, we have temporarily <strong>limited your account access</strong>.</p>",
+      "<p>To restore full access, you must confirm your identity immediately:</p>",
+      "LINK_0",
+      "<p style='margin-top:14px;'>If you do not verify within <strong>24 hours</strong>, your account will be permanently closed.</p>",
+      "<p style='font-size:12px;color:#999;margin-top:16px;'>PayPal Customer Protection Team | paypa1-secure-verify.xyz</p>"
+    ]
+  },
+  {
+    sender: "Google", email: "no-reply@accounts.google.com", avatarBg: "#34a853", avatarLetter: "G",
+    subject: "Security alert for your Google Account",
+    time: "Monday, 11:00 AM",
+    links: [
+      { label: "Check Activity", url: "https://myaccount.google.com/notifications", cls: "green" }
+    ],
+    bodyParts: [
+      "<p>Hi John,</p>",
+      "<p>Your Google Account <strong>john@gmail.com</strong> was just signed in to from a new Windows device.</p>",
+      "<p><strong>Device:</strong> Windows PC<br><strong>Location:</strong> Toronto, ON, Canada<br><strong>Time:</strong> March 4, 2026, 11:00 AM</p>",
+      "<p>If this was you, you don't need to do anything.</p>",
+      "LINK_0",
+      "<p style='margin-top:16px;font-size:13px;color:#5f6368;'>© 2026 Google LLC, 1600 Amphitheatre Parkway, Mountain View, CA 94043</p>"
+    ]
+  }
+];
+
+var pendingUrl = null;
+var currentEmailIdx = 0;
+
+function buildEmailBody(email) {
+  var parts = email.bodyParts.map(function(part) {
+    var match = part.match(/^LINK_(\d+)$/);
+    if (match) {
+      var link = email.links[parseInt(match[1])];
+      var extraStyle = link.style || '';
+      return '<button class="phish-link ' + (link.cls||'') + '" data-url="' + link.url + '" style="' + extraStyle + '">' + link.label + '</button>';
+    }
+    return part;
+  });
+  return parts.join('');
+}
+
+function openEmail(idx) {
+  currentEmailIdx = idx;
+  document.querySelectorAll('.email-row').forEach(function(r, i) {
+    r.classList.toggle('open', i === idx);
+  });
+  var e = EMAILS[idx];
+  var detail = document.getElementById('email-detail');
+  detail.innerHTML =
+    '<div class="ed-header">' +
+      '<div class="ed-subject">' + e.subject + '</div>' +
+      '<div class="ed-from">' +
+        '<div class="ed-avatar" style="background:' + e.avatarBg + ';">' + e.avatarLetter + '</div>' +
+        '<div class="ed-from-info">' +
+          '<div class="ed-from-name">' + e.sender + ' <span style="font-weight:400;color:#5f6368;font-size:13px;">&lt;' + e.email + '&gt;</span></div>' +
+          '<div class="ed-from-email">to me</div>' +
+        '</div>' +
+        '<div class="ed-time">' + e.time + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="ed-body">' + buildEmailBody(e) + '</div>' +
+    '<div class="ed-footer">' +
+      '<button class="ed-action">↩ Reply</button>' +
+      '<button class="ed-action">↪ Forward</button>' +
+    '</div>';
+
+  detail.querySelectorAll('.phish-link').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      interceptLink(this.getAttribute('data-url'));
+    });
+  });
+}
+
+// Wire up email rows
+document.getElementById('email-list').addEventListener('click', function(e) {
+  var row = e.target.closest('.email-row');
+  if (row) {
+    var idx = parseInt(row.getAttribute('data-idx'));
+    if (!isNaN(idx)) openEmail(idx);
+  }
+});
+
+// Detection logic
+var SUSPICIOUS_PHRASES = ["urgent action required","verify immediately","account will be locked","confirm your identity","unusual activity","suspended","verify your account","act now","action required"];
+var KNOWN_BRANDS = ["paypal","apple","amazon","google","microsoft","netflix","facebook","instagram","twitter","bank","chase","irs","fedex","ups","ebay"];
+
+function lev(a,b){var m=a.length,n=b.length,dp=[];for(var i=0;i<=m;i++){dp[i]=[];for(var j=0;j<=n;j++)dp[i][j]=i===0?j:j===0?i:0;}for(var i=1;i<=m;i++)for(var j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);return dp[m][n];}
+
+function analyzeLocally(input) {
+  var lower = input.toLowerCase();
+  var flags = []; var score = 0; var domain = "";
+  try { var u = new URL(input.startsWith("http") ? input : "https://" + input); domain = u.hostname.replace("www.",""); }
+  catch(e) { domain = input.split("/")[0].replace("www.",""); }
+  var nd = domain;
+  [["0","o"],["1","l"],["3","e"],["4","a"],["5","s"],["@","a"],["I","l"]].forEach(function(p){ nd = nd.split(p[0]).join(p[1]); });
+  KNOWN_BRANDS.forEach(function(brand) {
+    if (nd.indexOf(brand) >= 0 && !nd.endsWith(brand+".com") && !nd.endsWith(brand+".net") && !nd.endsWith(brand+".org"))
+      if (lev(nd.split(".")[0], brand) <= 3) { flags.push({severity:"high", msg:'Resembles "'+brand+'.com" — typosquatting'}); score+=40; }
+  });
+  [".xyz",".tk",".ml",".ga",".cf",".gq",".ru",".zip",".top"].forEach(function(t) {
+    if (domain.endsWith(t)) { flags.push({severity:"medium", msg:'Suspicious TLD "'+t+'"'}); score+=20; }
+  });
+  if ((domain.match(/-/g)||[]).length >= 2) { flags.push({severity:"medium", msg:"Excessive hyphens in domain"}); score+=15; }
+  if (domain.split(".").length - 2 >= 2) { flags.push({severity:"medium", msg:"Deep subdomain nesting"}); score+=20; }
+  if (/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(domain)) { flags.push({severity:"high", msg:"Raw IP address instead of domain"}); score+=35; }
+  SUSPICIOUS_PHRASES.forEach(function(p) { if (lower.indexOf(p) >= 0) { flags.push({severity:"medium", msg:'Urgency phrase: "'+p+'"'}); score+=10; } });
+  return { flags: flags, score: Math.min(score, 100), domain: domain };
+}
+
+// Small deterministic "baseline scan noise" (domain age, minor signals, etc.)
+// so a clean email reads as a believable low % instead of a flat 0%.
+function baselineNoise(str) {
+  var h = 0;
+  for (var i = 0; i < (str||'').length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return (h % 8) + 1; // 1-8
+}
+
+// Aggregate risk for a whole email: sender domain + every link + subject line +
+// prior-flag signal, so the inbox badge and the scan popup always agree.
+function analyzeEmailRisk(email) {
+  var flags = []; var score = baselineNoise(email.email || email.sender); var domain = ''; var seen = {};
+  function addFlag(f, weight) {
+    if (seen[f.msg]) return;
+    seen[f.msg] = true;
+    flags.push(f);
+    score += weight;
+  }
+  if (email.email && email.email.indexOf('@') >= 0) {
+    var sres = analyzeLocally(email.email.split('@')[1]);
+    domain = domain || sres.domain;
+    sres.flags.forEach(function(f){ addFlag(f, f.severity==='high'?35:f.severity==='medium'?18:8); });
+  }
+  (email.links||[]).forEach(function(l){
+    var lres = analyzeLocally(l.url);
+    domain = domain || lres.domain;
+    lres.flags.forEach(function(f){ addFlag(f, f.severity==='high'?35:f.severity==='medium'?18:8); });
+  });
+  var subjLower = (email.subject||'').toLowerCase();
+  SUSPICIOUS_PHRASES.forEach(function(p){
+    if (subjLower.indexOf(p) >= 0) addFlag({severity:'medium', msg:'Urgency phrase in subject: "'+p+'"'}, 12);
+  });
+  if (email.warning) addFlag({severity:'high', msg:'Sender previously flagged as a reported phishing source'}, 25);
+  return { flags: flags, score: Math.min(score, 100), domain: domain };
+}
+
+// Recompute and redraw every inbox risk badge from the same logic the popup uses.
+function refreshRiskBadges() {
+  EMAILS.forEach(function(email, idx) {
+    var pill = document.querySelector('#erow-' + idx + ' .risk-pill');
+    if (!pill) return;
+    var r = analyzeEmailRisk(email);
+    var danger = r.score > 20;
+    pill.className = 'risk-pill ' + (danger ? 'danger' : 'safe');
+    pill.innerHTML = (danger ? '⚠ Risk ' : '✓ Safe ') + '<span>' + r.score + '%</span>';
+  });
+}
+
+async function callClaude(input, localFlags) {
+  var prompt = "You are a cybersecurity expert analyzing a link from an email for phishing.\n\nURL: " + input + "\n\nLOCAL FLAGS:\n" + (localFlags.length ? localFlags.map(function(f){return "- ["+f.severity.toUpperCase()+"] "+f.msg;}).join("\n") : "None") + "\n\nRespond ONLY with valid JSON, no markdown:\n{\"verdict\":\"SAFE\"|\"SUSPICIOUS\"|\"PHISHING\",\"confidence\":0-100,\"short_reason\":\"one sentence\",\"threat_type\":\"None\"|\"Typosquatting\"|\"Credential Harvesting\"|\"Brand Impersonation\"|\"Social Engineering\"|\"Malware Distribution\"}";
+  var res = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:200,messages:[{role:"user",content:prompt}]})
+  });
+  if (!res.ok) throw new Error("API request failed with status " + res.status);
+  var data = await res.json();
+  var text = (data.content && data.content[0] && data.content[0].text) || "";
+  if (!text) throw new Error("API response missing content");
+  var parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
+  if (!parsed.verdict) throw new Error("API response missing verdict");
+  return parsed;
+}
+
+var delay = function(ms) { return new Promise(function(r){ setTimeout(r, ms); }); };
+
+async function interceptLink(url) {
+  if (!url) return;
+  pendingUrl = url;
+  var overlay = document.getElementById('analyze-overlay');
+  overlay.classList.add('show');
+  document.getElementById('analyze-url').textContent = url.length > 48 ? url.substring(0,48)+'...' : url;
+
+  var steps = ['step1','step2','step3','step4','step5'];
+  for (var i = 0; i < steps.length; i++) {
+    document.getElementById(steps[i]).classList.add('active');
+    await delay(i < 3 ? 500 : i === 3 ? 900 : 400);
+    document.getElementById(steps[i]).classList.remove('active');
+    document.getElementById(steps[i]).classList.add('done');
+  }
+
+  var local = analyzeEmailRisk(EMAILS[currentEmailIdx]);
+  var ai;
+  try { ai = await callClaude(url, local.flags); }
+  catch(e) {
+    var v = local.score > 50 ? "PHISHING" : local.score > 20 ? "SUSPICIOUS" : "SAFE";
+    var t = v === "SAFE" ? "None" : "Phishing";
+    ai = {verdict:v, confidence:70, short_reason:"Heuristic analysis (AI offline).", threat_type:t};
+  }
+
+  steps.forEach(function(s) { document.getElementById(s).classList.remove('active','done'); });
+  overlay.classList.remove('show');
+  showResult({local:local, ai:ai});
+}
+
+var THEME = {
+  SAFE:       {accent:"#137333", icon:"✅", label:"SAFE", bg:"#e6f4ea", border:"#81c995"},
+  SUSPICIOUS: {accent:"#c5221f", icon:"⚠️", label:"SUSPICIOUS", bg:"#fce8e6", border:"#f28b82"},
+  PHISHING:   {accent:"#c5221f", icon:"🚨", label:"PHISHING DETECTED", bg:"#fce8e6", border:"#f28b82"}
+};
+
+function showResult(result) {
+  var ai = result.ai; var local = result.local;
+  var t = THEME[ai.verdict] || THEME.SUSPICIOUS;
+
+  document.getElementById('result-icon').textContent = t.icon;
+  var vEl = document.getElementById('result-verdict');
+  vEl.textContent = t.label; vEl.style.color = t.accent;
+  document.getElementById('result-reason').textContent = ai.short_reason || '';
+  var top = document.getElementById('result-top');
+  top.style.background = t.bg; top.style.borderBottomColor = t.border;
+
+  var arc = document.getElementById('result-arc');
+  arc.setAttribute('stroke-dasharray', (local.score/100*163) + ' 163');
+  arc.setAttribute('stroke', t.accent);
+  var sn = document.getElementById('result-score-num');
+  sn.textContent = local.score; sn.setAttribute('fill', t.accent);
+
+  document.getElementById('result-type').textContent = ai.threat_type || '—';
+  document.getElementById('result-type').style.color = t.accent;
+  document.getElementById('result-conf').textContent = ai.confidence + '%';
+
+  var rf = document.getElementById('result-flags');
+  rf.innerHTML = '';
+  if (local.flags.length > 0) {
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'padding:6px 20px 4px;font-size:10px;color:#9aa0a6;letter-spacing:1px;text-transform:uppercase;font-weight:600;';
+    hdr.textContent = 'Detected Flags';
+    rf.appendChild(hdr);
+    local.flags.forEach(function(f) {
+      var fc = f.severity==="high" ? "#c5221f" : f.severity==="medium" ? "#b06000" : "#1a73e8";
+      var d = document.createElement('div');
+      d.className = 'rflag';
+      d.style.borderLeftColor = fc;
+      d.innerHTML = '<span style="color:'+fc+';font-size:10px;font-weight:600;">'+f.severity.toUpperCase()+'</span> &nbsp;'+f.msg;
+      rf.appendChild(d);
+    });
+  }
+
+  var bp = document.getElementById('btn-proceed');
+  var bs = document.getElementById('btn-proceed-safe');
+  var bd = document.getElementById('btn-dismiss');
+  if (ai.verdict === 'SAFE') {
+    bp.style.display = 'none'; bs.style.display = 'block'; bd.textContent = '✕ Close';
+  } else {
+    bp.style.display = 'block'; bs.style.display = 'none'; bd.textContent = '✕ Stay Safe';
+  }
+
+  document.getElementById('result-overlay').classList.add('show');
+}
+
+document.getElementById('btn-dismiss').addEventListener('click', function() {
+  document.getElementById('result-overlay').classList.remove('show');
+  pendingUrl = null;
+});
+document.getElementById('btn-proceed').addEventListener('click', function() {
+  document.getElementById('result-overlay').classList.remove('show');
+  pendingUrl = null;
+});
+document.getElementById('btn-proceed-safe').addEventListener('click', function() {
+  document.getElementById('result-overlay').classList.remove('show');
+  pendingUrl = null;
+});
+
+document.getElementById('ext-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  document.getElementById('ext-menu').classList.toggle('open');
+});
+document.addEventListener('click', function() {
+  document.getElementById('ext-menu').classList.remove('open');
+});
+document.getElementById('ext-menu').addEventListener('click', function(e) { e.stopPropagation(); });
+
+// Open first email on load
+refreshRiskBadges();
+openEmail(0);
+</script>
+</body>
+</html>
