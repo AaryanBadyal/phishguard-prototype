@@ -4,6 +4,7 @@
 > *Winner of the TedX Presentation Award at the April 2026 Cohort Hackathon.*
 
 ---
+![PhishGuard AI Demo](phishing-prototype-photo.png)
 
 ## Overview
 
