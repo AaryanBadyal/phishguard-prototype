@@ -37,7 +37,7 @@ The prototype simulates an active Chrome Extension integrated into a mock Gmail 
 
 Because the prototype is self-contained within a single executable HTML file, no complex server build step is required!
 
-### Option 1: Direct Local Execution
 1. Clone this repository:
    ```bash
-   git clone [https://github.com/AaryanBadyal/phishguard-prototype.git](https://github.com/AaryanBadyal/phishguard-prototype.git)
+   git clone https://github.com/AaryanBadyal/phishguard-prototype.git
+   ```
